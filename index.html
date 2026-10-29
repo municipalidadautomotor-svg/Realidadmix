@@ -10,7 +10,7 @@
 html,body{margin:0;height:100%;overflow:hidden;background:#8fe3ff;font-family:"Trebuchet MS","Comic Sans MS",Arial,sans-serif;font-weight:800;color:var(--ink)}
 canvas#c{position:fixed;inset:0;width:100%;height:100%}
 #hud{position:fixed;top:12px;left:12px;right:12px;display:none;gap:12px;justify-content:space-between;pointer-events:none}
-.chip{background:var(--y);border:5px solid var(--ink);border-radius:20px;padding:6px 20px;font-size:clamp(22px,3.4vw,44px);box-shadow:0 6px 0 var(--ink)}
+.chip{background:var(--y);border:5px solid var(--ink);border-radius:20px;padding:4px 14px;font-size:clamp(16px,3.4vw,44px);white-space:nowrap;box-shadow:0 6px 0 var(--ink)}
 #hint{position:fixed;bottom:10px;left:0;right:0;text-align:center;font-size:clamp(18px,2.4vw,32px);display:none;pointer-events:none}
 #hint span{background:#fff;border:4px solid var(--ink);border-radius:16px;padding:4px 16px;margin:0 6px;display:inline-block}
 #big{position:fixed;inset:0;display:none;align-items:center;justify-content:center;text-align:center;pointer-events:none;font-size:clamp(90px,20vw,280px);color:#fff;-webkit-text-stroke:6px var(--ink);padding:20px}
@@ -27,7 +27,7 @@ p{font-size:clamp(20px,3vw,40px);margin:10px 0;line-height:1.2}
 .tag{display:inline-block;background:var(--c);border:4px solid var(--ink);border-radius:14px;padding:2px 14px;font-size:clamp(18px,2.4vw,30px)}
 .opts{display:flex;gap:18px;margin-top:14px}
 .opt{flex:1;border:6px solid var(--ink);border-radius:24px;padding:16px;font-size:clamp(20px,2.8vw,38px);background:var(--c);position:relative;overflow:hidden}
-.opt.b{background:var(--g)}
+.opt.b{background:var(--g)}.opt{cursor:pointer}
 .opt i{position:absolute;left:0;bottom:0;height:14px;background:var(--p);width:0}
 button{font:inherit;font-size:clamp(24px,3.4vw,44px);background:var(--p);color:#fff;border:6px solid var(--ink);border-radius:24px;padding:10px 38px;box-shadow:0 8px 0 var(--ink);cursor:pointer;margin-top:12px}
 button:focus-visible,input:focus-visible{outline:6px solid var(--y)}
@@ -38,6 +38,10 @@ input[type=number]{font:inherit;width:6ch;font-size:inherit;border:4px solid var
 .stat b{display:block;font-size:clamp(34px,5vw,70px);color:var(--p);-webkit-text-stroke:2px var(--ink)}
 .note{font-size:clamp(15px,1.8vw,22px);font-weight:700}
 video{display:none}
+#skip{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;display:none;z-index:40;font-size:clamp(18px,2.6vw,30px);background:var(--c);color:var(--ink)}
+#touch{position:fixed;bottom:8px;left:0;right:0;display:none;justify-content:center;gap:8px;flex-wrap:wrap;z-index:50}
+#touch button{margin:0;font-size:22px;padding:10px 16px;box-shadow:0 4px 0 var(--ink);touch-action:none;user-select:none;-webkit-user-select:none}
+@media(max-width:700px){#hint{display:none!important}}
 </style>
 </head>
 <body>
@@ -46,13 +50,15 @@ video{display:none}
 <div id="hud"><div class="chip" id="hP">⭐ 0</div><div class="chip" id="hL">📍 Lugar 1 de 3</div><div class="chip" id="hS">👣 0</div></div>
 <div id="hint"><span>🚶 Caminá en el lugar</span><span>↔ Paso al costado</span><span>✋ Mano arriba</span></div>
 <div id="big"></div><div id="toast"></div><div id="flash"></div>
+<button id="skip">Empezar igual (con botones)</button>
+<div id="touch"><button data-k="l">◀</button><button data-k="r">▶</button><button data-k="s">👣 Caminar</button><button data-k="a">✋ A</button><button data-k="b">✋ B</button></div>
 
 <div class="panel on" id="pStart"><div class="card">
 <h1>¡Caminá por el Barrio 200 Viviendas!</h1>
 <p>El Colorado, Formosa. Vos sos el control: caminá en el lugar, movete al costado y levantá la mano.</p>
 <label>Tu peso (para calcular las calorías): <input type="number" id="peso" value="60" min="20" max="200"> kg</label>
 <label><input type="checkbox" id="nocam"> Jugar sin cámara (teclado: ↑ avanza, ← → carril, Q / E = mano izq. / der.)</label>
-<button id="go">¡Empezar!</button>
+<button id="go">¡Empezar con cámara!</button> <button id="go2">📱 Jugar con botones</button>
 <p class="note">🔒 La cámara se procesa en esta computadora. No se guarda ni se envía ninguna imagen.<br>Necesitás unos 2 metros libres y luz de frente.</p>
 </div></div>
 
@@ -80,7 +86,7 @@ const SRC=[
 const $=s=>document.querySelector(s);
 let THREE,pose,state="idle",useCam=true,peso=60,t=0,lastStep=-9,lastVT=-1,stepSide=null,stepCD=0;
 let score=0,steps=0,moveT=0,next=0,playerZ=0,targetZ=0,playerX=0,armed=true,hold=0,hl=0,hr=0;
-let baseX=.5,torso=.25,calib=null;
+let baseX=.5,torso=.25,calib=null,ema=null,bounce=null,vAsp=4/3,calibT0=0,touchOn=false,touchWalk=false,touchLast=0;
 const inp={lane:0,L:false,R:false},keys={};
 let renderer,scene,cam,body,tex,sc,sctx,coins=[],cones=[],clock;
 const video=$("#v");
@@ -160,16 +166,18 @@ function build(){
  sc=document.createElement("canvas");sc.width=640;sc.height=480;sctx=sc.getContext("2d",{willReadFrequently:true});
  sctx.font="260px serif";sctx.textAlign="center";sctx.textBaseline="middle";sctx.fillText("🚶",320,250);
  tex=new T.CanvasTexture(sc);
- body=new T.Mesh(new T.PlaneGeometry(4.27,3.2),new T.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,side:T.DoubleSide}));
- body.scale.x=-1;body.position.set(0,-.55,-3.4);body.renderOrder=10;cam.add(body);
+ body=new T.Mesh(new T.PlaneGeometry(1,1),new T.MeshBasicMaterial({map:tex,transparent:true,depthTest:false,side:T.DoubleSide}));
+ body.renderOrder=10;cam.add(body);
  clock=new T.Clock();
  addEventListener("resize",resize);resize();
 }
-function resize(){renderer.setSize(innerWidth,innerHeight,false);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()}
+function fitBody(){const visH=2*3.4*Math.tan(cam.fov*Math.PI/360),visW=visH*cam.aspect;
+ const H=Math.min(3.4,visH*.8,visW*.95/vAsp);body.scale.set(-H*vAsp,H,1);body.position.y=-visH/2+H/2-.05;body.position.z=-3.4}
+function resize(){renderer.setSize(innerWidth,innerHeight,false);const a=innerWidth/innerHeight;cam.aspect=a;cam.fov=a<1?Math.min(100,2*Math.atan(Math.tan(Math.PI/6)/a)*180/Math.PI):60;cam.updateProjectionMatrix();if(body)fitBody()}
 
 /* ====== CÁMARA + MEDIAPIPE ====== */
 async function initCam(){
- video.srcObject=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:"user"},audio:false});
+ video.srcObject=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:640},height:{ideal:480}},audio:false});
  await video.play();
  let err;
  for(const s of SRC)for(const delegate of["GPU","CPU"]){
@@ -181,7 +189,7 @@ async function initCam(){
 }
 function paint(mask){
  const w=mask.width,h=mask.height;
- if(sc.width!==w||sc.height!==h){sc.width=w;sc.height=h;tex.dispose()}
+ if(sc.width!==w||sc.height!==h){sc.width=w;sc.height=h;tex.dispose();vAsp=w/h;fitBody()}
  sctx.drawImage(video,0,0,w,h);
  const im=sctx.getImageData(0,0,w,h),d=im.data,m=mask.getAsFloat32Array();
  for(let i=0,j=3;i<m.length;i++,j+=4)d[j]=m[i]>.5?255:0;
@@ -197,22 +205,29 @@ function detect(){
 }
 function onPose(lm){
  if(state==="calib"){
-  const need=[11,12,23,24,25,26,27,28],ok=lm&&need.every(i=>lm[i].visibility>.5);
-  if(!ok){calib=null;big('<small>Alejate un poco: tiene que verse todo tu cuerpo, de la cabeza a los pies</small>');return}
+  const ok=lm&&[11,12,23,24].every(i=>lm[i].visibility>.35);
+  if(!ok){calib=null;big("<small>No te veo bien. Ponete de frente a la cámara, con hombros y cadera a la vista</small>");return}
   const hx=1-(lm[23].x+lm[24].x)/2,tr=Math.abs((lm[11].y+lm[12].y)/2-(lm[23].y+lm[24].y)/2);
   if(!calib)calib={t0:t,x:[],tr:[]};
   calib.x.push(hx);calib.tr.push(tr);
   const left=3-(t-calib.t0);
-  if(left<=0){baseX=calib.x.reduce((a,b)=>a+b)/calib.x.length;torso=Math.max(.08,calib.tr.reduce((a,b)=>a+b)/calib.tr.length);startPlay()}
+  if(left<=0){baseX=calib.x.reduce((a,b)=>a+b)/calib.x.length;torso=Math.max(.06,calib.tr.reduce((a,b)=>a+b)/calib.tr.length);startPlay();
+   if(!(lm[25].visibility>.4&&lm[26].visibility>.4))toast("No se ven las rodillas: cuento los pasos por tu rebote")}
   else big(Math.ceil(left)+"<small style='position:absolute;bottom:18%'>Quedate quieto/a un momento</small>");
   return;
  }
  if(!lm)return;
  const hx=1-(lm[23].x+lm[24].x)/2,dx=hx-baseX;
- if(dx<-.11)inp.lane=-1;else if(dx>.11)inp.lane=1;else if(Math.abs(dx)<.06)inp.lane=0;
- const d=lm[25].y-lm[26].y,th=torso*.15;
- if(d>th&&stepSide!=="R"){stepSide="R";step()}
- else if(d<-th&&stepSide!=="L"){stepSide="L";step()}
+ if(!touchOn){if(dx<-.11)inp.lane=-1;else if(dx>.11)inp.lane=1;else if(Math.abs(dx)<.06)inp.lane=0}
+ if(lm[25].visibility>.4&&lm[26].visibility>.4){
+  const d=lm[25].y-lm[26].y,th=torso*.15;
+  if(d>th&&stepSide!=="R"){stepSide="R";step()}
+  else if(d<-th&&stepSide!=="L"){stepSide="L";step()}
+ }else{
+  const hy=(lm[23].y+lm[24].y)/2;if(ema===null)ema=hy;ema+=(hy-ema)*.08;
+  const dv=hy-ema,bt=torso*.06;
+  if(dv>bt&&bounce!=="d"){bounce="d";step()}else if(dv<-bt)bounce="u";
+ }
  inp.L=lm[15].visibility>.4&&lm[15].y<lm[11].y-torso*.25;
  inp.R=lm[16].visibility>.4&&lm[16].y<lm[12].y-torso*.25;
 }
@@ -220,20 +235,21 @@ function step(){if(state!=="play"||t-stepCD<.15)return;stepCD=t;steps++;targetZ-
  targetZ=Math.max(targetZ,LZ[next]+4)}
 
 /* ====== JUEGO ====== */
-function hud(){$("#hP").textContent="⭐ "+score;$("#hS").textContent="👣 "+steps;$("#hL").textContent="📍 Lugar "+Math.min(next+1,3)+" de 3"}
-function reset(){score=0;steps=0;moveT=0;next=0;playerZ=0;targetZ=0;playerX=0;inp.lane=0;stepSide=null;calib=null;hold=hl=hr=0;
+function hud(){$("#hP").textContent="⭐ "+score;$("#hS").textContent="👣 "+steps;$("#hL").textContent="📍 "+Math.min(next+1,3)+"/3"}
+function reset(){score=0;steps=0;moveT=0;next=0;playerZ=0;targetZ=0;playerX=0;inp.lane=0;stepSide=null;calib=null;ema=null;bounce=null;hold=hl=hr=0;
  coins.forEach(c=>{c.got=false;c.g.visible=true});cones.forEach(c=>{c.hit=false});hud()}
-function begin(){reset();$("#hud").style.display="flex";$("#hint").style.display="block";
- if(useCam){state="calib";big("<small>Preparándote…</small>")}else startPlay()}
-function startPlay(){big(null);state="play";toast("¡Arrancá a caminar!")}
+function showTouch(v){touchOn=v;$("#touch").style.display=v?"flex":"none"}
+function begin(){reset();$("#hud").style.display="flex";$("#hint").style.display="block";showTouch(!useCam||touchOn);
+ if(useCam){state="calib";calibT0=t;big("<small>Preparándote…</small>")}else startPlay()}
+function startPlay(){big(null);$("#skip").style.display="none";state="play";toast("¡Arrancá a caminar!")}
 function openFicha(){
  const f=FICHAS[next];state="ficha1";armed=false;hold=0;
- $("#fCard").innerHTML=`<h2>${f.nombre}</h2><p><span class="tag">Dato</span> ${f.dato}</p><p><span class="tag">Curiosidad</span> ${f.curiosidad}</p><p class="note">✋ Levantá una mano para seguir<span id="hb"></span></p><div class="opt" style="padding:0;height:18px;border-width:4px"><i id="hbar" style="height:100%"></i></div>`;
+ $("#fCard").innerHTML=`<h2>${f.nombre}</h2><p><span class="tag">Dato</span> ${f.dato}</p><p><span class="tag">Curiosidad</span> ${f.curiosidad}</p><p class="note">✋ Levantá una mano para seguir</p><div class="opt" style="padding:0;height:18px;border-width:4px"><i id="hbar" style="height:100%"></i></div><button id="fcont">Seguir</button>`;
  $("#pFicha").classList.add("on");
 }
 function toQuestion(){
  const f=FICHAS[next];state="ficha2";armed=false;hl=hr=0;
- $("#fCard").innerHTML=`<h2>${f.nombre}</h2><p>${f.pregunta}</p><div class="opts"><div class="opt">✋ Mano izquierda<br>A) ${f.A}<i id="bl"></i></div><div class="opt b">Mano derecha ✋<br>B) ${f.B}<i id="br"></i></div></div>`;
+ $("#fCard").innerHTML=`<h2>${f.nombre}</h2><p>${f.pregunta}</p><div class="opts"><div class="opt" id="oa">✋ Mano izquierda<br>A) ${f.A}<i id="bl"></i></div><div class="opt b" id="ob">Mano derecha ✋<br>B) ${f.B}<i id="br"></i></div></div>`;
 }
 function answer(x){
  const f=FICHAS[next];$("#pFicha").classList.remove("on");
@@ -251,7 +267,7 @@ function finish(){
 function play(dt){
  const moving=t-lastStep<.7;if(moving)moveT+=dt;
  playerZ+=(targetZ-playerZ)*Math.min(1,dt*5);
- const hand=inp.L||inp.R||keys[" "];
+ const hand=inp.L||inp.R||keys[" "]||keys.q||keys.e;
  for(const c of coins){if(c.got)continue;c.g.rotation.y+=dt*3;const dz=playerZ-c.z;
   if(hand&&c.lane===inp.lane&&dz>-1&&dz<5){c.got=true;c.g.visible=false;score+=10;toast("+10");hud()}}
  for(const k of cones){if(k.hit)continue;if(k.lane===inp.lane&&Math.abs(k.z-playerZ)<1.3){k.hit=true;score=Math.max(0,score-5);toast("¡Cuidado! −5");hud();
@@ -272,6 +288,8 @@ function frame(){
  requestAnimationFrame(frame);
  const dt=Math.min(clock.getDelta(),.05);t+=dt;
  if(useCam)detect();
+ if(touchWalk&&t-touchLast>.35){touchLast=t;stepSide=stepSide==="L"?"R":"L";step()}
+ $("#skip").style.display=(state==="calib"&&t-calibT0>4)?"block":"none";
  if(state==="play")play(dt);else if(state==="ficha1"||state==="ficha2")fichaTick(dt);
  playerX+=(inp.lane*LANE-playerX)*Math.min(1,dt*8);
  cam.position.set(playerX*.6,3.4,playerZ+7.5);cam.lookAt(playerX*.6,1.6,playerZ-12);
@@ -295,7 +313,15 @@ async function start(){
   big(null);begin();
  }catch(e){big(null);$("#eMsg").textContent=e.message||String(e);$("#pErr").classList.add("on")}
 }
+document.querySelectorAll("#touch button").forEach(b=>{const k=b.dataset.k;
+ b.onpointerdown=e=>{e.preventDefault();if(k==="l")inp.lane=Math.max(-1,inp.lane-1);else if(k==="r")inp.lane=Math.min(1,inp.lane+1);else if(k==="s")touchWalk=true;else if(k==="a")keys.q=true;else keys.e=true};
+ b.onpointerup=b.onpointercancel=b.onpointerleave=()=>{if(k==="s")touchWalk=false;if(k==="a")keys.q=false;if(k==="b")keys.e=false}});
+$("#skip").onclick=()=>{showTouch(true);startPlay()};
 $("#go").onclick=start;
+$("#go2").onclick=()=>{$("#nocam").checked=true;start()};
+$("#fCard").onclick=e=>{const o=e.target.closest(".opt");
+ if(state==="ficha1"&&e.target.closest("#fcont"))toQuestion();
+ else if(state==="ficha2"&&o&&o.id)answer(o.id==="oa"?"A":"B")};
 $("#eKey").onclick=()=>{$("#nocam").checked=true;start()};
 </script>
 </body>
